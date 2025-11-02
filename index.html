@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Dancer World Map</title>
+<meta name="theme-color" content="#0a0f1a" />
+<style>
+:root{
+  --bg:#0a0f1a; --panel: rgba(14,18,28,.72); --card: rgba(14,18,28,.66);
+  --border:#25324a; --text:#f7fafc; --muted:#cbd5e1; --accent:#60a5ff; --accent2:#22d3ee;
+}
+*{box-sizing:border-box} html,body{height:100%}
+body{ margin:0;color:var(--text);background:var(--bg);
+  font:16px/1.6 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+}
+/* Background hero */
+body::before{ content:""; position:fixed; inset:0; z-index:-2;
+  background:url('images/bg-layer.jpg') center/cover no-repeat; filter:brightness(.45) contrast(1.05);
+}
+/* dark overlay for readability */
+body::after{ content:""; position:fixed; inset:0; z-index:-1; background:linear-gradient(180deg,rgba(7,11,18,.72),rgba(7,11,18,.85)); }
+a{color:var(--accent);text-decoration:none}
+.header{position:sticky;top:0;z-index:20;background:linear-gradient(180deg,rgba(8,12,22,.9),rgba(8,12,22,.76));border-bottom:1px solid var(--border);backdrop-filter:blur(8px)}
+.wrap{max-width:1280px;margin:0 auto;padding:14px 18px}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.grow{flex:1}
+.brand h1{margin:0;font-size:22px;letter-spacing:.2px}
+.controls input,.controls button{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:10px 12px;font-size:15px}
+.btn{border:1px solid var(--border);border-radius:12px;padding:10px 14px;background:rgba(255,255,255,.03);color:var(--text);cursor:pointer}
+.btn:hover{border-color:#3a4a6a;background:rgba(255,255,255,.06)}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06223a;border-color:transparent;font-weight:800}
+small.help{color:var(--muted);font-size:12px}
+main{max-width:1280px;margin:18px auto;padding:0 18px;display:grid;gap:18px}
+.mapWrap{display:grid;grid-template-columns:1.6fr 1fr;gap:18px}
+@media (max-width:1000px){.mapWrap{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:16px;box-shadow:0 10px 34px rgba(0,0,0,.35)}
+.mapBox{position:relative;width:100%;aspect-ratio:2/1;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:rgba(255,255,255,.02)}
+#mapSvg{width:100%;height:100%;display:block}
+#mapTint{fill:#0b1220; opacity:.18}
+/* Country list */
+.countryList{max-height:560px;overflow:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.country{border:1px solid var(--border);border-radius:12px;padding:12px 14px;background:var(--panel);cursor:pointer;box-shadow:0 2px 14px rgba(0,0,0,.25);text-align:left;display:flex;gap:10px;align-items:center}
+.country .flag{font-size:20px;line-height:1}
+.country b{display:block;font-size:14px}
+.country span{color:var(--muted);font-size:12px}
+.country:hover{border-color:#3a4a6a}
+/* Dialog */
+dialog{border:1px solid var(--border);border-radius:16px;background:rgba(11,17,27,.92);color:var(--text);max-width:1100px;width:96%;backdrop-filter:blur(6px)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+h3{font-size:24px;margin:0 0 8px 0}
+.tabbar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.item{border:1px solid var(--border);border-radius:12px;padding:10px;background:var(--panel);display:flex;justify-content:space-between;align-items:center;gap:10px}
+.item .meta{color:var(--muted);font-size:12px}
+.list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+@media (max-width:900px){.list{grid-template-columns:1fr}}
+.formgrid{display:grid;grid-template-columns:1fr 1.5fr 2fr 1fr 1.3fr 1.5fr auto;gap:10px;align-items:center}
+.formgrid input,.formgrid select{background:rgba(255,255,255,.06);border:1px solid var(--border);border-radius:10px;padding:10px 12px;color:var(--text)}
+.footerNote{display:flex;justify-content:space-between;align-items:center;margin-top:10px}
+.zoom-ui{position:absolute;right:12px;top:12px;display:flex;flex-direction:column;gap:8px;z-index:5}
+.zoom-ui button{width:40px;height:40px;border-radius:10px;border:1px solid var(--border);background:rgba(12,18,30,.92);color:#e6eefc;cursor:pointer;font-weight:900;font-size:18px}
+</style>
+</head>
+<body>
+<header class="header">
+  <div class="wrap row">
+    <div class="brand">
+      <h1>🗺️ Dancer World Map</h1>
+    </div>
+    <div class="controls grow"><input id="q" placeholder="Search country (press /)" /></div>
+    <div class="controls">
+      <button id="exportJSON" class="btn">Export JSON</button>
+      <label class="btn"><input type="file" id="importJSON" accept="application/json" hidden> Preview JSON</label>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="card mapWrap">
+    <div>
+      <div class="mapBox">
+        <svg id="mapSvg" viewBox="0 0 1600 800" preserveAspectRatio="none">
+          <g id="viewport" transform="translate(0,0) scale(1)">
+            <image href="images/world-map.jpg" x="0" y="0" width="1600" height="800" />
+            <rect id="mapTint" x="0" y="0" width="1600" height="800"></rect>
+          </g>
+        </svg>
+        <div class="zoom-ui">
+          <button id="zoomIn">+</button>
+          <button id="zoomOut">−</button>
+          <button id="reset">⤾</button>
+        </div>
+      </div>
+      <div class="footerNote">
+        <b>brothergreen represent</b>
+      </div>
+    </div>
+    <div>
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <h2 style="margin:0">Countries</h2><small class="help">Search (/) + list</small>
+      </div>
+      <div id="countryList" class="countryList"></div>
+    </div>
+  </section>
+</main>
+
+<dialog id="countryDlg">
+  <form method="dialog" id="countryForm">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <h3 id="countryName">Country</h3>
+      <button id="closeCountry" type="button" class="btn">Close</button>
+    </div>
+    <div class="tabbar" id="catTabs"></div>
+    <div class="list" id="linkList"></div>
+    <h4>Add Link</h4>
+    <div class="formgrid">
+      <label>Category</label>
+      <select id="newCategory">
+        <option>breaking</option><option>hiphop</option><option>locking</option><option>popping</option><option>waacking</option>
+      </select>
+      <label>Title</label>
+      <input id="newTitle" placeholder="Video/Channel title" />
+      <label>URL</label>
+      <input id="newUrl" placeholder="YouTube or any link" />
+      <label>City</label>
+      <input id="newCity" placeholder="e.g., Seoul, Osaka" />
+      <label>Tags</label>
+      <input id="newTags" placeholder="e.g., bgirl, crew" />
+      <label>Note</label>
+      <input id="newNote" placeholder="short comment" />
+      <div></div>
+      <button class="btn primary" id="addLinkBtn" value="default">Add</button>
+    </div>
+    <div class="footerNote"><small class="help">To publish: use <b>Export JSON</b> and commit to <code>data/seed.json</code>.</small></div>
+  </form>
+</dialog>
+
+<script>
+const STORAGE_KEY = "dwm_flags_v5";
+const COUNTRY_DB = [
+  ["US","United States"],
+  ["CA","Canada"],
+  ["MX","Mexico"],
+  ["BR","Brazil"],
+  ["AR","Argentina"],
+  ["GB","United Kingdom"],
+  ["FR","France"],
+  ["DE","Germany"],
+  ["IT","Italy"],
+  ["ES","Spain"],
+  ["PT","Portugal"],
+  ["NL","Netherlands"],
+  ["BE","Belgium"],
+  ["CH","Switzerland"],
+  ["SE","Sweden"],
+  ["NO","Norway"],
+  ["FI","Finland"],
+  ["PL","Poland"],
+  ["CZ","Czechia"],
+  ["TR","Turkey"],
+  ["RU","Russia"],
+  ["UA","Ukraine"],
+  ["GR","Greece"],
+  ["SA","Saudi Arabia"],
+  ["AE","United Arab Emirates"],
+  ["EG","Egypt"],
+  ["ZA","South Africa"],
+  ["NG","Nigeria"],
+  ["KE","Kenya"],
+  ["MA","Morocco"],
+  ["IN","India"],
+  ["PK","Pakistan"],
+  ["BD","Bangladesh"],
+  ["TH","Thailand"],
+  ["MY","Malaysia"],
+  ["SG","Singapore"],
+  ["ID","Indonesia"],
+  ["PH","Philippines"],
+  ["VN","Vietnam"],
+  ["KR","South Korea"],
+  ["JP","Japan"],
+  ["CN","China"],
+  ["TW","Taiwan"],
+  ["HK","Hong Kong"],
+  ["AU","Australia"],
+  ["NZ","New Zealand"],
+  ["IL","Israel"],
+  ["IR","Iran"],
+  ["CL","Chile"],
+  ["PE","Peru"],
+  ["CO","Colombia"],
+  ["VE","Venezuela"]
+];
+const CATEGORIES = ["breaking","hiphop","locking","popping","waacking"];
+let state = {countries:{}};
+let local = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{"countries":{}}');
+function saveLocal(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(local)); }
+function ensureCountry(id,name){ if(!local.countries[id]) local.countries[id] = { name, categories:Object.fromEntries(CATEGORIES.map(c=>[c,[]])) }; }
+function flagEmoji(code){ const A = 0x1F1E6; return code.toUpperCase().slice(0,2).split('').map(c => String.fromCodePoint(A + c.charCodeAt(0) - 65)).join(''); }
+
+// Country list & search
+function renderCountryList(filter=''){
+  const list=document.getElementById('countryList'); const q=(filter||'').toLowerCase(); list.innerHTML='';
+  COUNTRY_DB.filter(x=>!q||x[1].toLowerCase().includes(q)||x[0].toLowerCase().includes(q))
+    .forEach(([id,name])=>{
+      const b=document.createElement('button'); b.className='country';
+      const flag = flagEmoji(id);
+      b.innerHTML = `<span class="flag">${flag}</span><div><b>${name}</b><span>${id}</span></div>`;
+      b.addEventListener('click',()=>openCountry(id,name)); list.appendChild(b);
+    });
+}
+document.getElementById('q').addEventListener('input',(e)=>renderCountryList(e.target.value));
+document.addEventListener('keydown',(e)=>{ if(e.key==='/'){ e.preventDefault(); document.getElementById('q').focus(); }});
+
+// Remote seed preview/import/export
+async function fetchRemote(){ try{ const r=await fetch('data/seed.json?ts='+Date.now(),{cache:'no-store'}); if(r.ok) state=await r.json(); }catch(e){} }
+function getMergedCountry(id,name){
+  const r=(state.countries||{})[id]||{name, categories:Object.fromEntries(CATEGORIES.map(c=>[c,[]]))};
+  const l=(local.countries||{})[id];
+  const categories=Object.fromEntries(CATEGORIES.map(c=>[c,[...(r.categories?.[c]||[])]]));
+  if(l) CATEGORIES.forEach(c=>{ const map=new Map(); (categories[c]||[]).forEach(it=>map.set(it.id,it)); (l.categories?.[c]||[]).forEach(it=>map.set(it.id,it)); categories[c]=Array.from(map.values()); });
+  return {name:r.name||name, categories};
+}
+
+// Modal
+let currentCountry=null, activeCat='breaking';
+function openCountry(id,name){
+  currentCountry=[id,name];
+  const merged=getMergedCountry(id,name);
+  document.getElementById('countryName').textContent=`${name} (${id})`;
+  const tabs=document.getElementById('catTabs'); tabs.innerHTML='';
+  CATEGORIES.forEach(c=>{ const t=document.createElement('button'); t.className='btn'+(c===activeCat?' primary':''); t.textContent=c; t.addEventListener('click',()=>{ activeCat=c; openCountry(id,name); }); tabs.appendChild(t); });
+  const list=document.getElementById('linkList'); list.innerHTML='';
+  const items=merged.categories[activeCat]||[];
+  if(!items.length) list.innerHTML='<small class="help">No items yet.</small>';
+  items.forEach(it=>{
+    const el=document.createElement('div'); el.className='item';
+    el.innerHTML = `<div><div><b>${it.title||'(no title)'}</b> ${it.city?`· <span>${it.city}</span>`:''}</div>
+      <div class="meta">${it.note||''}</div>
+      <div class="meta">${(it.tags||[]).map(t=>`#${t}`).join(' ')}</div></div>
+      <div style="display:flex;gap:8px"><a class="btn primary" href="${it.url}" target="_blank" rel="noopener">Open</a>
+      <button class="btn" data-del="${it.id}">Delete</button></div>`;
+    el.querySelector('[data-del]').addEventListener('click', ()=>{
+      if(confirm('Delete this item?')){
+        const arr=(local.countries?.[id]?.categories?.[activeCat])||[];
+        const idx=arr.findIndex(x=>x.id===it.id);
+        if(idx>=0) arr.splice(idx,1);
+        saveLocal(); openCountry(id,name);
+      }
+    });
+    list.appendChild(el);
+  });
+  document.getElementById('countryDlg').showModal();
+}
+document.getElementById('closeCountry').addEventListener('click',()=>document.getElementById('countryDlg').close());
+
+// Add link
+document.getElementById('addLinkBtn').addEventListener('click',(e)=>{
+  e.preventDefault();
+  const [id,name]=currentCountry||[]; if(!id) return alert('Select a country first (from the list).');
+  const cat=document.getElementById('newCategory').value;
+  const title=document.getElementById('newTitle').value.trim();
+  const url=document.getElementById('newUrl').value.trim();
+  const city=document.getElementById('newCity').value.trim();
+  const tags=document.getElementById('newTags').value.split(/[ ,#]+/).map(s=>s.trim()).filter(Boolean);
+  const note=document.getElementById('newNote').value.trim();
+  if(!title || !url) return alert('Title and URL are required.');
+  ensureCountry(id,name);
+  const obj={id: crypto.randomUUID(), title, url, city, tags, note, addedAt: Date.now()};
+  local.countries[id].categories[cat]=local.countries[id].categories[cat]||[];
+  local.countries[id].categories[cat].unshift(obj);
+  saveLocal(); ['newTitle','newUrl','newCity','newTags','newNote'].forEach(i=>document.getElementById(i).value='');
+  activeCat=cat; openCountry(id,name);
+});
+
+// Export JSON (WORKING)
+function mergedAll(){
+  const out={countries:{}};
+  // Merge remote preview with local additions; local has priority
+  COUNTRY_DB.forEach(([id,name])=>{
+    const r=(state.countries||{})[id]||{name, categories:Object.fromEntries(CATEGORIES.map(c=>[c,[]]))};
+    const l=(local.countries||{})[id];
+    const categories=Object.fromEntries(CATEGORIES.map(c=>[c,[...(r.categories?.[c]||[])]]));
+    if(l) CATEGORIES.forEach(c=>{
+      const map=new Map(); (categories[c]||[]).forEach(it=>map.set(it.id,it));
+      (l.categories?.[c]||[]).forEach(it=>map.set(it.id,it));
+      categories[c]=Array.from(map.values());
+    });
+    const has=CATEGORIES.some(c=>(categories[c]||[]).length);
+    if(has) out.countries[id] = { name: r.name||name, categories };
+  });
+  out.version = 5; out.exportedAt = Date.now();
+  return out;
+}
+document.getElementById('exportJSON').addEventListener('click',()=>{
+  const blob = new Blob([JSON.stringify(mergedAll(), null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'dancer-world-map-export.json';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 0);
+});
+
+// Import (Preview JSON) -> load into state for preview (doesn't overwrite local)
+document.getElementById('importJSON').addEventListener('change',(e)=>{
+  const f=e.target.files[0]; if(!f) return; const r=new FileReader();
+  r.onload=()=>{ try{ state=JSON.parse(r.result); renderCountryList(document.getElementById('q').value); alert('Preview JSON loaded.'); }catch{ alert('Invalid JSON.'); } };
+  r.readAsText(f);
+});
+
+// Pan & Zoom (map only)
+const svg=document.getElementById('mapSvg'); const viewport=document.getElementById('viewport');
+let scale=1, tx=0, ty=0;
+function applyTransform(){ viewport.setAttribute('transform', `translate(${tx},${ty}) scale(${scale})`); }
+document.getElementById('zoomIn').addEventListener('click',()=>{ scale=Math.min(8, scale*1.25); applyTransform(); });
+document.getElementById('zoomOut').addEventListener('click',()=>{ scale=Math.max(1, scale/1.25); applyTransform(); });
+document.getElementById('reset').addEventListener('click',()=>{ scale=1; tx=0; ty=0; applyTransform(); });
+let dragging=false, lastX=0, lastY=0;
+svg.addEventListener('mousedown',(e)=>{ dragging=true; lastX=e.clientX; lastY=e.clientY; });
+window.addEventListener('mouseup',()=> dragging=false);
+window.addEventListener('mousemove',(e)=>{ if(!dragging) return; const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY; tx+=dx; ty+=dy; applyTransform(); });
+svg.addEventListener('wheel',(e)=>{ e.preventDefault(); const delta = e.deltaY<0 ? 1.1 : 0.9;
+  const pt = svg.createSVGPoint(); pt.x=e.offsetX; pt.y=e.offsetY;
+  const inv = viewport.getScreenCTM().inverse(); const p = pt.matrixTransform(inv);
+  const newScale = Math.min(8, Math.max(1, scale * delta)); const k=newScale/scale;
+  tx = p.x - k*(p.x - tx); ty = p.y - k*(p.y - ty); scale=newScale; applyTransform();
+},{passive:false});
+
+(async function(){ try{ const r=await fetch('data/seed.json?ts='+Date.now(),{cache:'no-store'}); if(r.ok) state=await r.json(); }catch(e){}; renderCountryList(''); })();
+</script>
+</body>
+</html>
